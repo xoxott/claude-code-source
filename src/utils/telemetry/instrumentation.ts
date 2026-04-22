@@ -51,6 +51,7 @@ import { getCACertificates } from '../caCerts.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { getHasFormattedOutput, logForDebugging } from '../debug.js'
 import { isEnvTruthy } from '../envUtils.js'
+import { isTelemetryDisabled } from '../privacyLevel.js'
 import { errorMessage } from '../errors.js'
 import { getMTLSConfig } from '../mtls.js'
 import { getProxyUrl, shouldBypassProxy } from '../proxy.js'
@@ -334,6 +335,12 @@ function getBigQueryExportingReader() {
 }
 
 function isBigQueryMetricsEnabled() {
+  // Honor the same user-level opt-out as product analytics (DISABLE_TELEMETRY /
+  // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC) so we do not attach the exporter or
+  // call organization metrics endpoints.
+  if (isTelemetryDisabled()) {
+    return false
+  }
   // BigQuery metrics are enabled for:
   // 1. API customers (excluding Claude.ai subscribers and Bedrock/Vertex)
   // 2. Claude for Enterprise (C4E) users

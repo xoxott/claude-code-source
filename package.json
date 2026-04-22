@@ -9,10 +9,13 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "bun --watch src/entrypoints/dev-cli.tsx",
-    "start": "bun src/entrypoints/dev-cli.tsx",
-    "start:home": "env CLAUDE_CONFIG_DIR=\"$HOME/.claude\" bun src/entrypoints/dev-cli.tsx",
-    "mcp": "bun src/entrypoints/dev-mcp.ts"
+    "dev": "bun scripts/dev-with-all-features.ts --watch src/entrypoints/dev-cli.tsx",
+    "start": "bun scripts/dev-with-all-features.ts src/entrypoints/dev-cli.tsx",
+    "start:home": "env CLAUDE_CONFIG_DIR=\"$HOME/.claude\" bun scripts/dev-with-all-features.ts src/entrypoints/dev-cli.tsx",
+    "mcp": "bun scripts/dev-with-all-features.ts src/entrypoints/dev-mcp.ts",
+    "start:vanilla": "bun src/entrypoints/dev-cli.tsx",
+    "dev:vanilla": "bun --watch src/entrypoints/dev-cli.tsx",
+    "mcp:vanilla": "bun src/entrypoints/dev-mcp.ts"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
