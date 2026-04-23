@@ -43,6 +43,16 @@ function hasRequiredSubscription(): boolean {
 }
 
 export function getChicagoEnabled(): boolean {
+  // 本地 fork 逃生舱：非 ant 用户走 LiteLLM / 第三方代理时，
+  // hasRequiredSubscription()（需要 Max/Pro 订阅）和 GrowthBook 的
+  // `tengu_malort_pedway.enabled`（默认 false）两道门都过不了。
+  // README 宣称 Computer Use 对 macOS 用户 ✅ 完整可用、预编译 .node
+  // 也齐全（deps/@ant/computer-use-{input,swift}/prebuilds/*-darwin/*.node），
+  // 所以本地需要一个显式开关来解锁。与上游 ALLOW_ANT_COMPUTER_USE_MCP
+  // 同风格：只是环境变量、不持久化、不影响正式构建。
+  if (isEnvTruthy(process.env.CLAUDE_CODE_FORCE_CHICAGO_MCP)) {
+    return true
+  }
   // Disable for ants whose shell inherited monorepo dev config.
   // MONOREPO_ROOT_DIR is exported by config/local/zsh/zshrc, which
   // laptop-setup.sh wires into ~/.zshrc — its presence is the cheap
