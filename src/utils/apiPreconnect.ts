@@ -21,12 +21,28 @@
  * - proxy/mTLS/unix socket configured (preconnect would use wrong transport —
  *   the SDK passes a custom dispatcher/agent that doesn't share the global pool)
  * - Bedrock/Vertex/Foundry (different endpoints, different auth)
+ * - Resolved base URL is not api.anthropic.com (e.g. LiteLLM on localhost): those
+ *   servers often respond 405 to HEAD on `/` or path prefixes; real calls are POST.
  */
 
 import { getOauthConfig } from '../constants/oauth.js'
 import { isEnvTruthy } from './envUtils.js'
 
 let fired = false
+
+/** HEAD preconnect is only safe on Anthropic's own API — gateways often return 405. */
+function isOfficialAnthropicApiOriginForHeadPreconnect(url: string): boolean {
+  try {
+    const host = new URL(url).host
+    const allowed = ['api.anthropic.com']
+    if (process.env.USER_TYPE === 'ant') {
+      allowed.push('api-staging.anthropic.com')
+    }
+    return allowed.includes(host)
+  } catch {
+    return false
+  }
+}
 
 export function preconnectAnthropicApi(): void {
   if (fired) return
@@ -57,7 +73,13 @@ export function preconnectAnthropicApi(): void {
   // ANTHROPIC_BASE_URL env + USE_STAGING_OAUTH + USE_LOCAL_OAUTH in one lookup.
   // NODE_EXTRA_CA_CERTS no longer a skip — init.ts applied it before this fires.
   const baseUrl =
-    process.env.ANTHROPIC_BASE_URL || getOauthConfig().BASE_API_URL
+    process.env.ANTHROPIC_BASE_URL?.trim() || getOauthConfig().BASE_API_URL
+
+  // LiteLLM, FastAPI, and many proxies do not implement HEAD on `/` or
+  // `/anthropic` (405 / redirect noise). Real traffic uses POST /v1/messages.
+  if (!isOfficialAnthropicApiOriginForHeadPreconnect(baseUrl)) {
+    return
+  }
 
   // Fire and forget. HEAD means no response body — the connection is eligible
   // for keep-alive pool reuse immediately after headers arrive. 10s timeout

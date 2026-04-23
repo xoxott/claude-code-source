@@ -114,6 +114,14 @@ const BUNDLE_FEATURES = [
  * absent or stub-only in this snapshot (e.g. SleepTool, hunter skill).
  */
 const FORK_EXCLUDED_FEATURES = new Set<string>([
+  // CACHED_MICROCOMPACT：本 fork 中 src/services/compact/cachedMCConfig.ts 只是
+  // 一个占位 stub，getCachedMCConfig() 始终返回 null。若打开此 feature，
+  // src/constants/prompts.ts 的 getFunctionResultClearingSection 会读 null 上的
+  // supportedModels 字段抛 TypeError，进而让 getSystemPrompt() 整个失败。由于
+  // 系统提示词构造在发请求之前，异常被 React 包进 unhandledRejection 后 Ink
+  // TUI 覆盖看不见，表现就是「输入任何内容都没反应、代理也收不到请求」。
+  // 在 cachedMCConfig.ts 被真正实现之前，这里必须把该 feature 关掉。
+  'CACHED_MICROCOMPACT',
   'CONTEXT_COLLAPSE',
   'DAEMON',
   'HISTORY_SNIP',
