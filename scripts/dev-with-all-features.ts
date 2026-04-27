@@ -14,7 +14,14 @@
  *        (see package.json "start" / "dev" / "mcp" / "start:home")
  */
 
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import * as path from 'node:path'
+import * as readline from 'node:readline'
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..')
+const PROJECT_TSCONFIG = path.join(PROJECT_ROOT, 'tsconfig.json')
 
 /** Keep in sync with README.md "完整 Feature Flag 列表". */
 const BUNDLE_FEATURES = [
@@ -157,17 +164,49 @@ const featureArgs = ENABLED_BUNDLE_FEATURES.flatMap(name => [
   '--feature',
   name,
 ])
-const cmd = ['bun', ...featureArgs, ...passthrough]
+// Force Bun to use THIS project's tsconfig, not the caller's cwd tsconfig.
+// Without this, running `claude` from a Vue/Solid/etc. project causes Bun to
+// pick up that project's `tsconfig.jsxImportSource` (e.g. "vue") and try to
+// import `vue/jsx-runtime` while transforming our .tsx files, crashing
+// immediately. CLI flags like `--jsx-import-source react` are NOT enough:
+// tsconfig wins over CLI flags for JSX settings, so we must override the
+// tsconfig path itself.
+const tsconfigArgs = ['--tsconfig-override', PROJECT_TSCONFIG]
+const cmd = ['bun', ...tsconfigArgs, ...featureArgs, ...passthrough]
 
 const env: NodeJS.ProcessEnv = { ...process.env }
 if (env.ENABLE_LSP_TOOL === undefined) {
   env.ENABLE_LSP_TOOL = 'true'
 }
 
-const result = spawnSync(cmd[0], cmd.slice(1), {
-  stdio: 'inherit',
+// Inherit stdin/stdout so Ink's TUI keeps tty semantics; pipe stderr so we can
+// filter Bun 1.3.13's harmless `--tsconfig-override` self-check noise:
+//   `Internal error: directory mismatch for directory "..." fd N.
+//    You don't need to do anything, but this indicates a bug.`
+// (bun source acknowledges it as a benign bug.) Without filtering, this single
+// line leaks into yolo's TUI on startup.
+const child = spawn(cmd[0], cmd.slice(1), {
+  stdio: ['inherit', 'inherit', 'pipe'],
   env,
-  encoding: 'utf8',
 })
 
-process.exit(result.status === null ? 1 : result.status)
+const BUN_TSCONFIG_NOISE = /^Internal error: directory mismatch for directory ".*", fd \d+\. You don't need to do anything, but this indicates a bug\.\s*$/
+const stderrLines = readline.createInterface({ input: child.stderr! })
+stderrLines.on('line', line => {
+  if (BUN_TSCONFIG_NOISE.test(line)) return
+  process.stderr.write(line + '\n')
+})
+
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => {
+    if (!child.killed) child.kill(sig)
+  })
+}
+
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal)
+    return
+  }
+  process.exit(code ?? 1)
+})
